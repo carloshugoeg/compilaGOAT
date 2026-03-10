@@ -1,0 +1,48 @@
+{
+    "programa": "Noname",
+    "funciones": [
+        {
+            "nombre": "suma",
+            "parametros": [
+                {
+                    "id": "a",
+                    "tipo": "int"
+                },
+                {
+                    "id": "b",
+                    "tipo": "int"
+                }
+            ],
+            "cuerpo": [
+                {
+                    "tipo": "asignacion",
+                    "variable": "c",
+                    "expresion": {
+                        "op": "+",
+                        "izq": "a",
+                        "der": "b"
+                    }
+                },
+                {
+                    "tipo": "return",
+                    "valor": "c"
+                }
+            ]
+        }
+    ],
+    "main": {
+        "nombre": "main",
+        "parametros": [],
+        "cuerpo": [
+            {
+                "tipo": "asignacion",
+                "variable": "resultado",
+                "expresion": null
+            },
+            {
+                "tipo": "return",
+                "valor": 0
+            }
+        ]
+    }
+}
