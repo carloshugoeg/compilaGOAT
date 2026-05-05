@@ -1,4 +1,4 @@
-# generador_asm.py - Generador de codigo ensamblador NASM x86 32-bit Linux para compilaGOAT
+
 
 
 def generar(ast):
@@ -251,6 +251,8 @@ class GeneradorASM:
             self._generar_print(nodo, con_newline=False)
         elif tipo == "println":
             self._generar_print(nodo, con_newline=True)
+        elif tipo == "printf":
+            self._generar_printf(nodo)
         elif tipo == "si":
             self._generar_si(nodo)
         elif tipo == "mientras":
@@ -302,6 +304,29 @@ class GeneradorASM:
             self._emit(f"  mov ecx, _newline")
             self._emit(f"  mov edx, _newline_len")
             self._emit(f"  int 0x80")
+
+    def _generar_printf(self, nodo):
+        self._emit(f"  ; printf (nota: requiere enlazar con libc)")
+        # Anadir 'extern printf' si no esta (solo como referencia)
+        if "  extern printf" not in self.seccion_text:
+            # Ponemos el extern al inicio de text o global
+            pass # se podria agregar, omitido por simplicidad de archivo
+        
+        # Guardar espacio
+        espacio = len(nodo['argumentos']) * 4
+        
+        for arg in reversed(nodo["argumentos"]):
+            if arg["tipo"] == "literal_cadena":
+                etiqueta = self._registrar_cadena(arg["valor"] + "\\0")
+                self._emit(f"  push {etiqueta}")
+            else:
+                self._generar_expresion(arg)
+                self._emit("  push eax")
+        
+        self._emit("  extern printf")
+        self._emit("  call printf")
+        if espacio > 0:
+            self._emit(f"  add esp, {espacio}")
 
     def _generar_si(self, nodo):
         etiqueta_sino = self._nueva_etiqueta("sino")
@@ -386,8 +411,9 @@ class GeneradorASM:
             self._emit(f"  mov eax, {nodo['valor']}")
 
         elif tipo == "literal_flotante":
-            # Aproximacion: truncar a entero para asm
-            self._emit(f"  mov eax, {int(nodo['valor'])}")
+            import struct
+            val = struct.unpack('<I', struct.pack('<f', float(nodo['valor'])))[0]
+            self._emit(f"  mov eax, {val}  ; float {nodo['valor']}")
 
         elif tipo == "literal_cadena":
             # Registrar cadena y poner su direccion en eax
@@ -424,6 +450,7 @@ class GeneradorASM:
 
     def _generar_operacion_binaria(self, nodo):
         operador = nodo["operador"]
+        es_float = nodo.get("tipo_dato") == "float"
 
         # Evaluar izquierdo, guardar en stack, evaluar derecho
         self._generar_expresion(nodo["izquierdo"])
@@ -432,42 +459,70 @@ class GeneradorASM:
         self._emit("  mov ebx, eax")  # derecho en ebx
         self._emit("  pop eax")       # izquierdo en eax
 
-        if operador == "+":
-            self._emit("  add eax, ebx")
-        elif operador == "-":
-            self._emit("  sub eax, ebx")
-        elif operador == "*":
-            self._emit("  imul eax, ebx")
-        elif operador == "/":
-            self._emit("  cdq")
-            self._emit("  idiv ebx")
-        elif operador == "%":
-            self._emit("  cdq")
-            self._emit("  idiv ebx")
-            self._emit("  mov eax, edx")  # residuo
-        elif operador in ("==", "!=", "<", "<=", ">", ">="):
-            self._emit("  cmp eax, ebx")
-            instruccion_set = {
-                "==": "sete",
-                "!=": "setne",
-                "<":  "setl",
-                "<=": "setle",
-                ">":  "setg",
-                ">=": "setge",
-            }
-            self._emit(f"  {instruccion_set[operador]} al")
-            self._emit("  movzx eax, al")
-        elif operador == "&&":
-            # a && b: ambos deben ser != 0
-            self._emit("  cmp eax, 0")
-            self._emit("  setne al")
-            self._emit("  cmp ebx, 0")
-            self._emit("  setne bl")
-            self._emit("  and al, bl")
-            self._emit("  movzx eax, al")
-        elif operador == "||":
-            # a || b: al menos uno != 0
-            self._emit("  or eax, ebx")
-            self._emit("  cmp eax, 0")
-            self._emit("  setne al")
-            self._emit("  movzx eax, al")
+        if es_float:
+            self._emit("  movd xmm0, eax")
+            self._emit("  movd xmm1, ebx")
+            if operador == "+":
+                self._emit("  addss xmm0, xmm1")
+                self._emit("  movd eax, xmm0")
+            elif operador == "-":
+                self._emit("  subss xmm0, xmm1")
+                self._emit("  movd eax, xmm0")
+            elif operador == "*":
+                self._emit("  mulss xmm0, xmm1")
+                self._emit("  movd eax, xmm0")
+            elif operador == "/":
+                self._emit("  divss xmm0, xmm1")
+                self._emit("  movd eax, xmm0")
+            elif operador in ("==", "!=", "<", "<=", ">", ">="):
+                self._emit("  ucomiss xmm0, xmm1")
+                instruccion_set = {
+                    "==": "sete",
+                    "!=": "setne",
+                    "<":  "setb",
+                    "<=": "setbe",
+                    ">":  "seta",
+                    ">=": "setae",
+                }
+                self._emit(f"  {instruccion_set[operador]} al")
+                self._emit("  movzx eax, al")
+        else:
+            if operador == "+":
+                self._emit("  add eax, ebx")
+            elif operador == "-":
+                self._emit("  sub eax, ebx")
+            elif operador == "*":
+                self._emit("  imul eax, ebx")
+            elif operador == "/":
+                self._emit("  cdq")
+                self._emit("  idiv ebx")
+            elif operador == "%":
+                self._emit("  cdq")
+                self._emit("  idiv ebx")
+                self._emit("  mov eax, edx")  # residuo
+            elif operador in ("==", "!=", "<", "<=", ">", ">="):
+                self._emit("  cmp eax, ebx")
+                instruccion_set = {
+                    "==": "sete",
+                    "!=": "setne",
+                    "<":  "setl",
+                    "<=": "setle",
+                    ">":  "setg",
+                    ">=": "setge",
+                }
+                self._emit(f"  {instruccion_set[operador]} al")
+                self._emit("  movzx eax, al")
+            elif operador == "&&":
+                # a && b: ambos deben ser != 0
+                self._emit("  cmp eax, 0")
+                self._emit("  setne al")
+                self._emit("  cmp ebx, 0")
+                self._emit("  setne bl")
+                self._emit("  and al, bl")
+                self._emit("  movzx eax, al")
+            elif operador == "||":
+                # a || b: al menos uno != 0
+                self._emit("  or eax, ebx")
+                self._emit("  cmp eax, 0")
+                self._emit("  setne al")
+                self._emit("  movzx eax, al")

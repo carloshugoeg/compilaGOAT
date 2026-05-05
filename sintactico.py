@@ -1,5 +1,3 @@
-# sintactico.py - Analizador sintactico (parser recursivo descendente) para compilaGOAT
-
 
 class Parser:
     def __init__(self, tokens):
@@ -114,6 +112,8 @@ class Parser:
             return self._parsear_print()
         elif token["tipo"] == "PALABRA_PRINTLN":
             return self._parsear_println()
+        elif token["tipo"] == "PALABRA_PRINTF":
+            return self._parsear_printf()
         elif token["tipo"] == "PALABRA_IF":
             return self._parsear_si()
         elif token["tipo"] == "PALABRA_WHILE":
@@ -146,6 +146,14 @@ class Parser:
         self._consumir("PARENTESIS_DER")
         self._consumir("PUNTO_Y_COMA")
         return {"tipo": "println", "expresion": expresion}
+
+    def _parsear_printf(self):
+        self._consumir("PALABRA_PRINTF")
+        self._consumir("PARENTESIS_IZQ")
+        argumentos = self._parsear_argumentos()
+        self._consumir("PARENTESIS_DER")
+        self._consumir("PUNTO_Y_COMA")
+        return {"tipo": "printf", "argumentos": argumentos}
 
     def _parsear_si(self):
         self._consumir("PALABRA_IF")

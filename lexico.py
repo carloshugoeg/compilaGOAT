@@ -1,4 +1,3 @@
-# lexico.py - Analizador lexico (tokenizador) para compilaGOAT
 
 PALABRAS_RESERVADAS = {
     "int":     "PALABRA_INT",
@@ -11,6 +10,7 @@ PALABRAS_RESERVADAS = {
     "return":  "PALABRA_RETURN",
     "print":   "PALABRA_PRINT",
     "println": "PALABRA_PRINTLN",
+    "printf":  "PALABRA_PRINTF",
 }
 
 OPERADORES_DOBLES = {

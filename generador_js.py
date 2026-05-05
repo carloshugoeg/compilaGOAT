@@ -1,6 +1,3 @@
-# generador_js.py - Generador de codigo JavaScript para compilaGOAT
-
-
 def generar(ast):
     """Genera codigo JavaScript a partir del AST."""
     generador = GeneradorJS()
@@ -62,6 +59,10 @@ class GeneradorJS:
         if tipo == "println":
             expr = self._generar_expresion(nodo["expresion"])
             return f"{ind}console.log({expr});"
+
+        if tipo == "printf":
+            args = ", ".join(self._generar_expresion(a) for a in nodo["argumentos"])
+            return f"{ind}process.stdout.write(require('util').format({args}));"
 
         if tipo == "return":
             if nodo["expresion"] is not None:

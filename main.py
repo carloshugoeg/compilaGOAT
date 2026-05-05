@@ -1,8 +1,8 @@
-# main.py - Punto de entrada del compilador compilaGOAT
 
 import json
 import lexico
 import sintactico
+import semantico
 import generador_js
 import generador_asm
 import compilador
@@ -83,6 +83,27 @@ int main() {
 }
 '''
     },
+    {
+        "nombre": "7. Coma flotante",
+        "codigo": '''
+int main() {
+    float a = 3.5;
+    float b = 2.0;
+    float c = a * b;
+    println("Resultado de float:");
+    println(c);
+}
+'''
+    },
+    {
+        "nombre": "8. Uso de printf",
+        "codigo": '''
+int main() {
+    int x = 42;
+    printf("El valor de x es %d\\n", x);
+}
+'''
+    },
 ]
 
 
@@ -120,6 +141,15 @@ def ejecutar_programa(programa):
     print(f"\n--- AST (JSON) ---")
     print(json.dumps(ast, indent=2, ensure_ascii=False))
 
+    # Fase 2.5: Analisis semantico
+    try:
+        ast = semantico.analizar(ast)
+        print("\n--- Analisis Semantico ---")
+        print("  Sin errores semanticos.")
+    except semantico.ErrorSemantico as e:
+        print(f"\nError semantico: {e}")
+        return
+
     # Fase 3: Generacion de JavaScript
     try:
         codigo_js = generador_js.generar(ast)
@@ -140,15 +170,17 @@ def ejecutar_programa(programa):
     print(f"\n--- NASM generado ---")
     print(codigo_asm)
 
-    # Fase 5: Compilacion (intentar, puede fallar en macOS)
-    print(f"\n--- Compilacion ---")
+    # Fase 5: Guardar archivo ASM (referencia)
     nombre_salida = f"programa_{nombre.split('.')[0].strip()}"
     nombre_salida = nombre_salida.replace(" ", "_").lower()
-    exito = compilador.compilar(codigo_asm, nombre_salida)
-    if exito:
-        print(f"  Compilacion exitosa!")
-    else:
-        print(f"  Compilacion no completada (ver advertencias arriba)")
+    print(f"\n--- Archivo ASM ---")
+    compilador.compilar(codigo_asm, nombre_salida)
+
+    # Fase 6: Ejecucion con Node.js
+    print(f"\n--- Ejecucion (Node.js) ---")
+    exito = compilador.ejecutar_js(codigo_js, nombre_salida)
+    if not exito:
+        print(f"  Ejecucion fallida")
 
 
 def main():
