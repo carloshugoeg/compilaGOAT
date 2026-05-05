@@ -57,6 +57,28 @@ def analizar(ast):
         
     return ast
 
+def _promover_tipo(nodo, tipo_actual, tipo_destino):
+    if tipo_actual == tipo_destino:
+        return
+    if tipo_actual == "int" and tipo_destino == "float":
+        original_node = dict(nodo)
+        nodo.clear()
+        nodo["tipo"] = "cast"
+        nodo["tipo_dato"] = "float"
+        nodo["de"] = "int"
+        nodo["a"] = "float"
+        nodo["operando"] = original_node
+    elif tipo_actual == "float" and tipo_destino == "int":
+        original_node = dict(nodo)
+        nodo.clear()
+        nodo["tipo"] = "cast"
+        nodo["tipo_dato"] = "int"
+        nodo["de"] = "float"
+        nodo["a"] = "int"
+        nodo["operando"] = original_node
+    else:
+        raise ErrorSemantico(f"No se puede convertir implicitamente de {tipo_actual} a {tipo_destino}")
+
 def _analizar_bloque(instrucciones, tabla, tipo_retorno_func):
     for instr in instrucciones:
         _analizar_instruccion(instr, tabla, tipo_retorno_func)
@@ -69,7 +91,7 @@ def _analizar_instruccion(nodo, tabla, tipo_retorno_func):
             tipo_expr = _analizar_expresion(nodo["expresion"], tabla)
             if nodo["tipo_dato"] != tipo_expr:
                 if (nodo["tipo_dato"] == "float" and tipo_expr == "int") or (nodo["tipo_dato"] == "int" and tipo_expr == "float"):
-                    pass # cast implicito
+                    _promover_tipo(nodo["expresion"], tipo_expr, nodo["tipo_dato"])
                 else:
                     raise ErrorSemantico(f"Incompatibilidad de tipos en declaracion de '{nodo['nombre']}': se esperaba {nodo['tipo_dato']}, se obtuvo {tipo_expr}")
         tabla.declarar_variable(nodo["nombre"], nodo["tipo_dato"])
@@ -79,7 +101,7 @@ def _analizar_instruccion(nodo, tabla, tipo_retorno_func):
         tipo_expr = _analizar_expresion(nodo["expresion"], tabla)
         if tipo_var != tipo_expr:
             if (tipo_var == "float" and tipo_expr == "int") or (tipo_var == "int" and tipo_expr == "float"):
-                pass
+                _promover_tipo(nodo["expresion"], tipo_expr, tipo_var)
             else:
                 raise ErrorSemantico(f"Incompatibilidad de tipos en asignacion de '{nodo['nombre']}': se esperaba {tipo_var}, se obtuvo {tipo_expr}")
             
@@ -92,6 +114,8 @@ def _analizar_instruccion(nodo, tabla, tipo_retorno_func):
             
     elif tipo == "si":
         tipo_cond = _analizar_expresion(nodo["condicion"], tabla)
+        if tipo_cond == "string":
+            raise ErrorSemantico("Condicion en 'if' no puede ser string")
         tabla.entrar_scope()
         _analizar_bloque(nodo["cuerpo_verdadero"], tabla, tipo_retorno_func)
         tabla.salir_scope()
@@ -102,6 +126,8 @@ def _analizar_instruccion(nodo, tabla, tipo_retorno_func):
             
     elif tipo == "mientras":
         tipo_cond = _analizar_expresion(nodo["condicion"], tabla)
+        if tipo_cond == "string":
+            raise ErrorSemantico("Condicion en 'while' no puede ser string")
         tabla.entrar_scope()
         _analizar_bloque(nodo["cuerpo"], tabla, tipo_retorno_func)
         tabla.salir_scope()
@@ -109,7 +135,9 @@ def _analizar_instruccion(nodo, tabla, tipo_retorno_func):
     elif tipo == "para":
         tabla.entrar_scope()
         _analizar_instruccion(nodo["inicializacion"], tabla, tipo_retorno_func)
-        _analizar_expresion(nodo["condicion"], tabla)
+        tipo_cond = _analizar_expresion(nodo["condicion"], tabla)
+        if tipo_cond == "string":
+            raise ErrorSemantico("Condicion en 'for' no puede ser string")
         _analizar_instruccion(nodo["incremento"], tabla, tipo_retorno_func)
         _analizar_bloque(nodo["cuerpo"], tabla, tipo_retorno_func)
         tabla.salir_scope()
@@ -119,12 +147,11 @@ def _analizar_instruccion(nodo, tabla, tipo_retorno_func):
             tipo_expr = _analizar_expresion(nodo["expresion"], tabla)
             if tipo_retorno_func != tipo_expr:
                 if (tipo_retorno_func == "float" and tipo_expr == "int") or (tipo_retorno_func == "int" and tipo_expr == "float"):
-                    pass
+                    _promover_tipo(nodo["expresion"], tipo_expr, tipo_retorno_func)
                 else:
                     raise ErrorSemantico(f"Tipo de retorno incorrecto: se esperaba {tipo_retorno_func}, se obtuvo {tipo_expr}")
         else:
             if tipo_retorno_func != "void":
-                # In this language "void" might not be implemented, let's just accept
                 pass
                 
     elif tipo == "llamada":
@@ -135,7 +162,7 @@ def _analizar_instruccion(nodo, tabla, tipo_retorno_func):
             tipo_arg = _analizar_expresion(arg, tabla)
             if tipo_arg != param["tipo_dato"]:
                 if (param["tipo_dato"] == "float" and tipo_arg == "int") or (param["tipo_dato"] == "int" and tipo_arg == "float"):
-                    pass
+                    _promover_tipo(arg, tipo_arg, param["tipo_dato"])
                 else:
                     raise ErrorSemantico(f"Argumento invalido para '{param['nombre']}' en '{nodo['nombre']}': se esperaba {param['tipo_dato']}, se obtuvo {tipo_arg}")
 
@@ -162,19 +189,40 @@ def _analizar_expresion(nodo, tabla):
     elif tipo_expr == "operacion_binaria":
         tipo_izq = _analizar_expresion(nodo["izquierdo"], tabla)
         tipo_der = _analizar_expresion(nodo["derecho"], tabla)
+        operador = nodo["operador"]
         
-        # Operadores booleanos y de comparacion retornan int (1 o 0)
-        if nodo["operador"] in ("==", "!=", "<", "<=", ">", ">=", "&&", "||"):
+        # Validar y promover tipos segun el operador
+        if operador in ("+", "-", "*", "/", "==", "!=", "<", "<=", ">", ">="):
+            if tipo_izq == "string" or tipo_der == "string":
+                raise ErrorSemantico(f"Operador '{operador}' no soportado para strings")
+            
+            tipo_comun = "int"
+            if tipo_izq == "float" or tipo_der == "float":
+                tipo_comun = "float"
+                
+            _promover_tipo(nodo["izquierdo"], tipo_izq, tipo_comun)
+            _promover_tipo(nodo["derecho"], tipo_der, tipo_comun)
+            
+            if operador in ("+", "-", "*", "/"):
+                nodo["tipo_dato"] = tipo_comun
+                return tipo_comun
+            else:
+                nodo["tipo_dato"] = "int"
+                return "int"
+                
+        elif operador == "%":
+            if tipo_izq != "int" or tipo_der != "int":
+                raise ErrorSemantico("Operador '%' solo soportado para enteros")
             nodo["tipo_dato"] = "int"
             return "int"
             
-        # Operadores aritmeticos
-        if tipo_izq == "float" or tipo_der == "float":
-            nodo["tipo_dato"] = "float"
-            return "float"
-        else:
+        elif operador in ("&&", "||"):
+            if tipo_izq == "string" or tipo_der == "string":
+                raise ErrorSemantico(f"Operador '{operador}' no soportado para strings")
             nodo["tipo_dato"] = "int"
             return "int"
+            
+        raise ErrorSemantico(f"Operador desconocido: {operador}")
             
     elif tipo_expr == "operacion_unaria":
         tipo_op = _analizar_expresion(nodo["operando"], tabla)
@@ -192,7 +240,7 @@ def _analizar_expresion(nodo, tabla):
             tipo_arg = _analizar_expresion(arg, tabla)
             if tipo_arg != param["tipo_dato"]:
                 if (param["tipo_dato"] == "float" and tipo_arg == "int") or (param["tipo_dato"] == "int" and tipo_arg == "float"):
-                    pass
+                    _promover_tipo(arg, tipo_arg, param["tipo_dato"])
                 else:
                     raise ErrorSemantico(f"Argumento invalido para '{param['nombre']}' en '{nodo['nombre']}': se esperaba {param['tipo_dato']}, se obtuvo {tipo_arg}")
         nodo["tipo_dato"] = func["tipo_retorno"]

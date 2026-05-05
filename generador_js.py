@@ -145,6 +145,13 @@ class GeneradorJS:
         if tipo == "identificador":
             return nodo["nombre"]
 
+        if tipo == "cast":
+            expr = self._generar_expresion(nodo["operando"])
+            if nodo["a"] == "int":
+                return f"Math.trunc({expr})"
+            else:
+                return f"Number({expr})"
+
         if tipo == "operacion_binaria":
             izq = self._generar_expresion(nodo["izquierdo"])
             der = self._generar_expresion(nodo["derecho"])

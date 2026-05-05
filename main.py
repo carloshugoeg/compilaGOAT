@@ -104,6 +104,22 @@ int main() {
 }
 '''
     },
+    {
+        "nombre": "9. Promocion de tipos",
+        "codigo": '''
+int main() {
+    float a = 3.5;
+    int b = 2;
+    float c = a + b; // b se promueve a float implicitamente
+    println("Resultado de float + int:");
+    println(c);
+    
+    int d = c; // c se trunca a int implicitamente
+    println("Cast implicito float a int:");
+    println(d);
+}
+'''
+    },
 ]
 
 

@@ -427,6 +427,15 @@ class GeneradorASM:
             else:
                 self._emit(f"  mov eax, [ebp-{offset}]")
 
+        elif tipo == "cast":
+            self._generar_expresion(nodo["operando"])
+            if nodo["de"] == "int" and nodo["a"] == "float":
+                self._emit("  cvtsi2ss xmm0, eax")
+                self._emit("  movd eax, xmm0")
+            elif nodo["de"] == "float" and nodo["a"] == "int":
+                self._emit("  movd xmm0, eax")
+                self._emit("  cvttss2si eax, xmm0")
+
         elif tipo == "operacion_binaria":
             self._generar_operacion_binaria(nodo)
 
